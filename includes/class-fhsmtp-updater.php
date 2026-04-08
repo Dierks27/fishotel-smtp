@@ -26,6 +26,7 @@ class FHSMTP_Updater {
         add_filter( 'pre_set_site_transient_update_plugins', array( $this, 'check_for_update' ) );
         add_filter( 'plugins_api', array( $this, 'plugin_info' ), 10, 3 );
         add_filter( 'upgrader_process_complete', array( $this, 'after_update' ), 10, 2 );
+        add_filter( 'upgrader_source_selection', array( $this, 'fix_source_dir' ), 10, 4 );
     }
 
     /**
@@ -142,6 +143,29 @@ class FHSMTP_Updater {
                 'changelog'   => nl2br( esc_html( $release['description'] ) ),
             ),
         );
+    }
+
+    /**
+     * Rename the extracted folder from GitHub's format (e.g. Dierks27-fishotel-smtp-abc1234)
+     * back to the expected plugin folder name so WordPress doesn't deactivate the plugin.
+     */
+    public function fix_source_dir( $source, $remote_source, $upgrader, $hook_extra ) {
+        if ( ! isset( $hook_extra['plugin'] ) || $hook_extra['plugin'] !== $this->plugin_slug ) {
+            return $source;
+        }
+
+        $expected_dir = trailingslashit( $remote_source ) . dirname( $this->plugin_slug ) . '/';
+
+        if ( $source === $expected_dir ) {
+            return $source;
+        }
+
+        global $wp_filesystem;
+        if ( $wp_filesystem->move( $source, $expected_dir ) ) {
+            return $expected_dir;
+        }
+
+        return $source;
     }
 
     /**
