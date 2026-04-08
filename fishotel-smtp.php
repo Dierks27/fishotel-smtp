@@ -3,7 +3,7 @@
  * Plugin Name: FisHotel SMTP
  * Plugin URI: https://github.com/Dierks27/fishotel-smtp
  * Description: Custom SMTP mailer with Amazon SES support, backup failover, email logging, and failure alerts.
- * Version: 1.1.1
+ * Version: 1.1.2
  * Author: FisHotel
  * Author URI: https://github.com/Dierks27
  * License: GPL-2.0+
@@ -14,7 +14,7 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
-define( 'FHSMTP_VERSION', '1.1.1' );
+define( 'FHSMTP_VERSION', '1.1.2' );
 define( 'FHSMTP_PLUGIN_FILE', __FILE__ );
 define( 'FHSMTP_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'FHSMTP_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -55,6 +55,8 @@ final class FisHotel_SMTP {
 
         add_action( 'plugins_loaded', array( $this, 'init_components' ) );
         add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_admin_assets' ) );
+        add_filter( 'plugin_row_meta', array( $this, 'add_check_update_link' ), 10, 2 );
+        add_action( 'admin_init', array( $this, 'handle_check_update' ) );
     }
 
     public function init_components() {
@@ -201,6 +203,35 @@ final class FisHotel_SMTP {
             'ajax_url' => admin_url( 'admin-ajax.php' ),
             'nonce'    => wp_create_nonce( 'fhsmtp_nonce' ),
         ) );
+    }
+
+    public function handle_check_update() {
+        if ( empty( $_GET['fhsmtp_check_update'] ) ) {
+            return;
+        }
+        if ( ! current_user_can( 'update_plugins' ) || ! wp_verify_nonce( $_GET['_wpnonce'] ?? '', 'fhsmtp_check_update' ) ) {
+            return;
+        }
+
+        delete_transient( 'fhsmtp_update_check' );
+        delete_site_transient( 'update_plugins' );
+
+        wp_safe_redirect( admin_url( 'plugins.php?fhsmtp_updated_check=1' ) );
+        exit;
+    }
+
+    public function add_check_update_link( $links, $file ) {
+        if ( plugin_basename( FHSMTP_PLUGIN_FILE ) !== $file ) {
+            return $links;
+        }
+
+        $check_url = wp_nonce_url(
+            admin_url( 'plugins.php?fhsmtp_check_update=1' ),
+            'fhsmtp_check_update'
+        );
+        $links[] = sprintf( '<a href="%s">Check for Updates</a>', esc_url( $check_url ) );
+
+        return $links;
     }
 }
 
