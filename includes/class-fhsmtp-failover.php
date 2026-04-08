@@ -151,7 +151,8 @@ class FHSMTP_Failover {
      * Used by the admin "Test Backup" button.
      */
     public static function send_with_backup_only( $to ) {
-        $GLOBALS['fhsmtp_use_backup'] = true;
+        $GLOBALS['fhsmtp_use_backup']    = true;
+        $GLOBALS['fhsmtp_is_test_email'] = true;
 
         $subject = sprintf( '[%s] FisHotel SMTP Test (Backup)', get_bloginfo( 'name' ) );
         $message = sprintf(
@@ -162,6 +163,7 @@ class FHSMTP_Failover {
 
         $result = wp_mail( $to, $subject, $message );
         unset( $GLOBALS['fhsmtp_use_backup'] );
+        unset( $GLOBALS['fhsmtp_is_test_email'] );
 
         if ( $result ) {
             return array( 'success' => true, 'message' => 'Backup test email sent successfully.' );

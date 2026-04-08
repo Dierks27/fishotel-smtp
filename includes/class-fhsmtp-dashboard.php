@@ -15,6 +15,11 @@ class FHSMTP_Dashboard {
     }
 
     private function __construct() {
+        $misc = get_option( 'fhsmtp_misc_settings', array() );
+        if ( ! empty( $misc['hide_dashboard_widget'] ) && $misc['hide_dashboard_widget'] === '1' ) {
+            return;
+        }
+
         add_action( 'wp_dashboard_setup', array( $this, 'add_dashboard_widget' ) );
         add_action( 'wp_ajax_fhsmtp_dashboard_test', array( $this, 'ajax_quick_test' ) );
     }

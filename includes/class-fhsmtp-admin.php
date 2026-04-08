@@ -56,6 +56,12 @@ class FHSMTP_Admin {
         register_setting( 'fhsmtp_alerts', 'fhsmtp_alert_settings', array(
             'sanitize_callback' => array( $this, 'sanitize_alert_settings' ),
         ) );
+        register_setting( 'fhsmtp_email_controls_group', 'fhsmtp_email_controls', array(
+            'sanitize_callback' => array( $this, 'sanitize_email_controls' ),
+        ) );
+        register_setting( 'fhsmtp_misc', 'fhsmtp_misc_settings', array(
+            'sanitize_callback' => array( $this, 'sanitize_misc_settings' ),
+        ) );
     }
 
     public function sanitize_connection_settings( $input ) {
@@ -67,6 +73,8 @@ class FHSMTP_Admin {
         $sanitized['from_email']      = sanitize_email( $input['from_email'] ?? '' );
         $sanitized['from_name']       = sanitize_text_field( $input['from_name'] ?? '' );
         $sanitized['region']          = sanitize_text_field( $input['region'] ?? 'us-east-1' );
+
+        $sanitized['force_from_email'] = ! empty( $input['force_from_email'] ) ? '1' : '0';
 
         // Only update password if provided (don't blank it out)
         $current = get_option( 'fhsmtp_settings', array() );
@@ -108,7 +116,39 @@ class FHSMTP_Admin {
         );
     }
 
+    public function sanitize_email_controls( $input ) {
+        $keys = array(
+            'notify_moderator', 'notify_post_author',
+            'admin_email_change_attempt', 'admin_email_changed',
+            'reset_password_request', 'password_reset_success',
+            'password_changed', 'email_change_attempt', 'email_changed',
+            'user_confirmed_action', 'admin_erased_data', 'admin_sent_export_link',
+            'auto_plugin_update_email', 'auto_theme_update_email',
+            'auto_core_update_email', 'auto_update_debug_email',
+            'new_user_admin_notify', 'new_user_user_notify',
+        );
+        $sanitized = array();
+        foreach ( $keys as $key ) {
+            $sanitized[ $key ] = ! empty( $input[ $key ] ) ? '1' : '0';
+        }
+        return $sanitized;
+    }
+
+    public function sanitize_misc_settings( $input ) {
+        return array(
+            'do_not_send'           => ! empty( $input['do_not_send'] ) ? '1' : '0',
+            'hide_delivery_errors'  => ! empty( $input['hide_delivery_errors'] ) ? '1' : '0',
+            'hide_dashboard_widget' => ! empty( $input['hide_dashboard_widget'] ) ? '1' : '0',
+            'remove_data_on_delete' => ! empty( $input['remove_data_on_delete'] ) ? '1' : '0',
+        );
+    }
+
     public function admin_notices() {
+        $misc = get_option( 'fhsmtp_misc_settings', array() );
+        if ( ! empty( $misc['hide_delivery_errors'] ) && $misc['hide_delivery_errors'] === '1' ) {
+            return;
+        }
+
         $settings = get_option( 'fhsmtp_settings', array() );
         if ( empty( $settings['smtp_host'] ) && ! defined( 'FHSMTP_SMTP_HOST' ) ) {
             $url = admin_url( 'options-general.php?page=fishotel-smtp' );
@@ -130,10 +170,12 @@ class FHSMTP_Admin {
 
         $active_tab = isset( $_GET['tab'] ) ? sanitize_text_field( $_GET['tab'] ) : 'connection';
         $tabs = array(
-            'connection' => 'Connection',
-            'logging'    => 'Logging',
-            'backup'     => 'Backup',
-            'alerts'     => 'Alerts',
+            'connection'     => 'Connection',
+            'logging'        => 'Logging',
+            'backup'         => 'Backup',
+            'alerts'         => 'Alerts',
+            'email_controls' => 'Email Controls',
+            'misc'           => 'Misc',
         );
 
         ?>
@@ -163,6 +205,12 @@ class FHSMTP_Admin {
                     break;
                 case 'alerts':
                     $this->render_alerts_tab();
+                    break;
+                case 'email_controls':
+                    $this->render_email_controls_tab();
+                    break;
+                case 'misc':
+                    $this->render_misc_tab();
                     break;
                 default:
                     $this->render_connection_tab();
@@ -285,6 +333,17 @@ class FHSMTP_Admin {
                         <input type="text" name="fhsmtp_settings[from_name]" id="fhsmtp_from_name"
                                value="<?php echo esc_attr( $settings['from_name'] ?? '' ); ?>"
                                class="regular-text">
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row">Force From Email</th>
+                    <td>
+                        <label>
+                            <input type="checkbox" name="fhsmtp_settings[force_from_email]" value="1"
+                                <?php checked( $settings['force_from_email'] ?? '0', '1' ); ?>>
+                            Force the From Email and From Name for all outgoing emails
+                        </label>
+                        <p class="description">If checked, the From Email and From Name above will be used for <strong>all</strong> emails, ignoring values set by other plugins.</p>
                     </td>
                 </tr>
             </table>
@@ -518,6 +577,241 @@ class FHSMTP_Admin {
             </table>
 
             <?php submit_button( 'Save Alert Settings' ); ?>
+        </form>
+        <?php
+    }
+
+    // -------------------------------------------------------------------------
+    // Email Controls Tab
+    // -------------------------------------------------------------------------
+
+    private function render_email_controls_tab() {
+        $s = get_option( 'fhsmtp_email_controls', array() );
+        ?>
+        <form method="post" action="options.php">
+            <?php settings_fields( 'fhsmtp_email_controls_group' ); ?>
+
+            <p class="description" style="margin-bottom:15px;">
+                Control which WordPress notification emails are sent. Unchecked emails will be silently blocked.
+            </p>
+
+            <div class="fhsmtp-email-controls">
+
+                <h3>Comments</h3>
+                <table class="form-table">
+                    <tr>
+                        <th scope="row">Awaiting Moderation</th>
+                        <td>
+                            <label><input type="checkbox" name="fhsmtp_email_controls[notify_moderator]" value="1" <?php checked( $s['notify_moderator'] ?? '1', '1' ); ?>> Enable</label>
+                            <p class="description">Comment is awaiting moderation. Sent to the site admin and post author if they can edit comments.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Published</th>
+                        <td>
+                            <label><input type="checkbox" name="fhsmtp_email_controls[notify_post_author]" value="1" <?php checked( $s['notify_post_author'] ?? '1', '1' ); ?>> Enable</label>
+                            <p class="description">Comment has been published. Sent to the post author.</p>
+                        </td>
+                    </tr>
+                </table>
+
+                <h3>Change of Admin Email</h3>
+                <table class="form-table">
+                    <tr>
+                        <th scope="row">Site Admin Email Change Attempt</th>
+                        <td>
+                            <label><input type="checkbox" name="fhsmtp_email_controls[admin_email_change_attempt]" value="1" <?php checked( $s['admin_email_change_attempt'] ?? '1', '1' ); ?>> Enable</label>
+                            <p class="description">Change of site admin email address was attempted. Sent to the proposed new email address.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Site Admin Email Changed</th>
+                        <td>
+                            <label><input type="checkbox" name="fhsmtp_email_controls[admin_email_changed]" value="1" <?php checked( $s['admin_email_changed'] ?? '1', '1' ); ?>> Enable</label>
+                            <p class="description">Site admin email address was changed. Sent to the old site admin email address.</p>
+                        </td>
+                    </tr>
+                </table>
+
+                <h3>Change of User Email or Password</h3>
+                <table class="form-table">
+                    <tr>
+                        <th scope="row">Reset Password Request</th>
+                        <td>
+                            <label><input type="checkbox" name="fhsmtp_email_controls[reset_password_request]" value="1" <?php checked( $s['reset_password_request'] ?? '1', '1' ); ?>> Enable</label>
+                            <p class="description">User requested a password reset via "Lost your password?". Sent to the user.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Password Reset Successfully</th>
+                        <td>
+                            <label><input type="checkbox" name="fhsmtp_email_controls[password_reset_success]" value="1" <?php checked( $s['password_reset_success'] ?? '1', '1' ); ?>> Enable</label>
+                            <p class="description">User reset their password from the password reset link. Sent to the site admin.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Password Changed</th>
+                        <td>
+                            <label><input type="checkbox" name="fhsmtp_email_controls[password_changed]" value="1" <?php checked( $s['password_changed'] ?? '1', '1' ); ?>> Enable</label>
+                            <p class="description">User changed their password. Sent to the user.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Email Change Attempt</th>
+                        <td>
+                            <label><input type="checkbox" name="fhsmtp_email_controls[email_change_attempt]" value="1" <?php checked( $s['email_change_attempt'] ?? '1', '1' ); ?>> Enable</label>
+                            <p class="description">User attempted to change their email address. Sent to the proposed new email address.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Email Changed</th>
+                        <td>
+                            <label><input type="checkbox" name="fhsmtp_email_controls[email_changed]" value="1" <?php checked( $s['email_changed'] ?? '1', '1' ); ?>> Enable</label>
+                            <p class="description">User changed their email address. Sent to the user.</p>
+                        </td>
+                    </tr>
+                </table>
+
+                <h3>Personal Data Requests</h3>
+                <table class="form-table">
+                    <tr>
+                        <th scope="row">User Confirmed Export / Erasure Request</th>
+                        <td>
+                            <label><input type="checkbox" name="fhsmtp_email_controls[user_confirmed_action]" value="1" <?php checked( $s['user_confirmed_action'] ?? '1', '1' ); ?>> Enable</label>
+                            <p class="description">User clicked a confirmation link in personal data export or erasure request email. Sent to the site admin.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Admin Erased Data</th>
+                        <td>
+                            <label><input type="checkbox" name="fhsmtp_email_controls[admin_erased_data]" value="1" <?php checked( $s['admin_erased_data'] ?? '1', '1' ); ?>> Enable</label>
+                            <p class="description">Site admin clicked "Erase Personal Data" button next to a confirmed data erasure request. Sent to the requester.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Admin Sent Link to Export Data</th>
+                        <td>
+                            <label><input type="checkbox" name="fhsmtp_email_controls[admin_sent_export_link]" value="1" <?php checked( $s['admin_sent_export_link'] ?? '1', '1' ); ?>> Enable</label>
+                            <p class="description">Site admin clicked "Email Data" button next to a confirmed data export request. Sent to the requester. <strong>Disabling this will prevent users from receiving their data export.</strong></p>
+                        </td>
+                    </tr>
+                </table>
+
+                <h3>Automatic Updates</h3>
+                <table class="form-table">
+                    <tr>
+                        <th scope="row">Plugin Status</th>
+                        <td>
+                            <label><input type="checkbox" name="fhsmtp_email_controls[auto_plugin_update_email]" value="1" <?php checked( $s['auto_plugin_update_email'] ?? '1', '1' ); ?>> Enable</label>
+                            <p class="description">Completion or failure of a background automatic plugin update. Sent to the site admin.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Theme Status</th>
+                        <td>
+                            <label><input type="checkbox" name="fhsmtp_email_controls[auto_theme_update_email]" value="1" <?php checked( $s['auto_theme_update_email'] ?? '1', '1' ); ?>> Enable</label>
+                            <p class="description">Completion or failure of a background automatic theme update. Sent to the site admin.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">WP Core Status</th>
+                        <td>
+                            <label><input type="checkbox" name="fhsmtp_email_controls[auto_core_update_email]" value="1" <?php checked( $s['auto_core_update_email'] ?? '1', '1' ); ?>> Enable</label>
+                            <p class="description">Completion or failure of a background automatic core update. Sent to the site admin.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Full Log</th>
+                        <td>
+                            <label><input type="checkbox" name="fhsmtp_email_controls[auto_update_debug_email]" value="1" <?php checked( $s['auto_update_debug_email'] ?? '1', '1' ); ?>> Enable</label>
+                            <p class="description">Full log of background update results. Only sent when using a development version of WordPress.</p>
+                        </td>
+                    </tr>
+                </table>
+
+                <h3>New User</h3>
+                <table class="form-table">
+                    <tr>
+                        <th scope="row">Created (Admin)</th>
+                        <td>
+                            <label><input type="checkbox" name="fhsmtp_email_controls[new_user_admin_notify]" value="1" <?php checked( $s['new_user_admin_notify'] ?? '1', '1' ); ?>> Enable</label>
+                            <p class="description">A new user was created. Sent to the site admin.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Created (User)</th>
+                        <td>
+                            <label><input type="checkbox" name="fhsmtp_email_controls[new_user_user_notify]" value="1" <?php checked( $s['new_user_user_notify'] ?? '1', '1' ); ?>> Enable</label>
+                            <p class="description">A new user was created. Sent to the new user.</p>
+                        </td>
+                    </tr>
+                </table>
+
+            </div>
+
+            <?php submit_button( 'Save Email Controls' ); ?>
+        </form>
+        <?php
+    }
+
+    // -------------------------------------------------------------------------
+    // Misc Tab
+    // -------------------------------------------------------------------------
+
+    private function render_misc_tab() {
+        $settings = get_option( 'fhsmtp_misc_settings', array() );
+        ?>
+        <form method="post" action="options.php">
+            <?php settings_fields( 'fhsmtp_misc' ); ?>
+
+            <table class="form-table">
+                <tr>
+                    <th scope="row">Do Not Send</th>
+                    <td>
+                        <label>
+                            <input type="checkbox" name="fhsmtp_misc_settings[do_not_send]" value="1"
+                                <?php checked( $settings['do_not_send'] ?? '0', '1' ); ?>>
+                            Stop sending all emails
+                        </label>
+                        <p class="description fhsmtp-warning">Warning: This will prevent ALL WordPress emails from being sent, including password resets and admin notifications. Test emails sent from FisHotel SMTP settings will still work.</p>
+                        <p class="description">Some plugins (like BuddyPress and Events Manager) use their own email delivery solutions and may not be affected by this option.</p>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row">Hide Email Delivery Errors</th>
+                    <td>
+                        <label>
+                            <input type="checkbox" name="fhsmtp_misc_settings[hide_delivery_errors]" value="1"
+                                <?php checked( $settings['hide_delivery_errors'] ?? '0', '1' ); ?>>
+                            Hide warnings alerting of email delivery errors
+                        </label>
+                        <p class="description">This is not recommended and should only be done for staging or development sites.</p>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row">Hide Dashboard Widget</th>
+                    <td>
+                        <label>
+                            <input type="checkbox" name="fhsmtp_misc_settings[hide_dashboard_widget]" value="1"
+                                <?php checked( $settings['hide_dashboard_widget'] ?? '0', '1' ); ?>>
+                            Hide the FisHotel SMTP Dashboard Widget
+                        </label>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row">Uninstall FisHotel SMTP</th>
+                    <td>
+                        <label>
+                            <input type="checkbox" name="fhsmtp_misc_settings[remove_data_on_delete]" value="1"
+                                <?php checked( $settings['remove_data_on_delete'] ?? '0', '1' ); ?>>
+                            Remove ALL FisHotel SMTP data upon plugin deletion
+                        </label>
+                        <p class="description fhsmtp-warning">All settings, email logs, and database tables will be permanently removed. This cannot be undone.</p>
+                    </td>
+                </tr>
+            </table>
+
+            <?php submit_button( 'Save Misc Settings' ); ?>
         </form>
         <?php
     }

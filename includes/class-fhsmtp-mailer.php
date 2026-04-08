@@ -16,8 +16,18 @@ class FHSMTP_Mailer {
 
     private function __construct() {
         add_action( 'phpmailer_init', array( $this, 'configure_phpmailer' ), 99 );
-        add_filter( 'wp_mail_from', array( $this, 'set_from_email' ), 99 );
-        add_filter( 'wp_mail_from_name', array( $this, 'set_from_name' ), 99 );
+
+        $settings = get_option( 'fhsmtp_settings', array() );
+        $force    = ( $settings['force_from_email'] ?? '0' ) === '1';
+        $priority = $force ? PHP_INT_MAX : 99;
+
+        add_filter( 'wp_mail_from', array( $this, 'set_from_email' ), $priority );
+        add_filter( 'wp_mail_from_name', array( $this, 'set_from_name' ), $priority );
+
+        // When forcing, also override in phpmailer_init at max priority
+        if ( $force ) {
+            add_action( 'phpmailer_init', array( $this, 'force_from_in_phpmailer' ), PHP_INT_MAX );
+        }
     }
 
     public function get_settings() {
@@ -89,6 +99,21 @@ class FHSMTP_Mailer {
     }
 
     /**
+     * Force From address in phpmailer_init at max priority.
+     * Ensures our From overrides anything set by other plugins.
+     */
+    public function force_from_in_phpmailer( $phpmailer ) {
+        $settings = $this->get_settings();
+        if ( ! empty( $settings['from_email'] ) ) {
+            $phpmailer->From   = $settings['from_email'];
+            $phpmailer->Sender = $settings['from_email'];
+        }
+        if ( ! empty( $settings['from_name'] ) ) {
+            $phpmailer->FromName = $settings['from_name'];
+        }
+    }
+
+    /**
      * Get the SES SMTP host for a given AWS region.
      */
     public static function ses_host_for_region( $region ) {
@@ -127,6 +152,9 @@ class FHSMTP_Mailer {
      * Send a test email using current settings. Returns array with success/error.
      */
     public static function send_test_email( $to, $connection = 'primary' ) {
+        // Flag to bypass "Do Not Send" in misc settings
+        $GLOBALS['fhsmtp_is_test_email'] = true;
+
         $subject = sprintf(
             '[%s] FisHotel SMTP Test Email (%s)',
             get_bloginfo( 'name' ),
@@ -140,6 +168,7 @@ class FHSMTP_Mailer {
         );
 
         $result = wp_mail( $to, $subject, $message );
+        unset( $GLOBALS['fhsmtp_is_test_email'] );
 
         if ( $result ) {
             return array( 'success' => true, 'message' => 'Test email sent successfully.' );

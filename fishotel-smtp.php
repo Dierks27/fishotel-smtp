@@ -3,7 +3,7 @@
  * Plugin Name: FisHotel SMTP
  * Plugin URI: https://github.com/Dierks27/fishotel-smtp
  * Description: Custom SMTP mailer with Amazon SES support, backup failover, email logging, and failure alerts.
- * Version: 1.0.0
+ * Version: 1.1.0
  * Author: FisHotel
  * Author URI: https://github.com/Dierks27
  * License: GPL-2.0+
@@ -14,7 +14,7 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
-define( 'FHSMTP_VERSION', '1.0.0' );
+define( 'FHSMTP_VERSION', '1.1.0' );
 define( 'FHSMTP_PLUGIN_FILE', __FILE__ );
 define( 'FHSMTP_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'FHSMTP_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -46,6 +46,7 @@ final class FisHotel_SMTP {
         require_once FHSMTP_PLUGIN_DIR . 'includes/class-fhsmtp-dashboard.php';
         require_once FHSMTP_PLUGIN_DIR . 'includes/class-fhsmtp-updater.php';
         require_once FHSMTP_PLUGIN_DIR . 'includes/class-fhsmtp-csv-export.php';
+        require_once FHSMTP_PLUGIN_DIR . 'includes/class-fhsmtp-email-controls.php';
     }
 
     private function init_hooks() {
@@ -64,6 +65,7 @@ final class FisHotel_SMTP {
         FHSMTP_Alerts::instance();
         FHSMTP_Dashboard::instance();
         FHSMTP_CSV_Export::instance();
+        FHSMTP_Email_Controls::instance();
 
         new FHSMTP_Updater(
             'Dierks27/fishotel-smtp',
@@ -84,6 +86,7 @@ final class FisHotel_SMTP {
             'from_email'      => get_option( 'admin_email' ),
             'from_name'       => get_option( 'blogname' ),
             'region'          => 'us-east-1',
+            'force_from_email'=> '0',
         );
         if ( ! get_option( 'fhsmtp_settings' ) ) {
             add_option( 'fhsmtp_settings', $defaults );
@@ -120,6 +123,38 @@ final class FisHotel_SMTP {
         );
         if ( ! get_option( 'fhsmtp_alert_settings' ) ) {
             add_option( 'fhsmtp_alert_settings', $alert_defaults );
+        }
+
+        if ( ! get_option( 'fhsmtp_email_controls' ) ) {
+            add_option( 'fhsmtp_email_controls', array(
+                'notify_moderator'           => '1',
+                'notify_post_author'         => '1',
+                'admin_email_change_attempt' => '1',
+                'admin_email_changed'        => '1',
+                'reset_password_request'     => '1',
+                'password_reset_success'     => '1',
+                'password_changed'           => '1',
+                'email_change_attempt'       => '1',
+                'email_changed'              => '1',
+                'user_confirmed_action'      => '1',
+                'admin_erased_data'          => '1',
+                'admin_sent_export_link'     => '1',
+                'auto_plugin_update_email'   => '1',
+                'auto_theme_update_email'    => '1',
+                'auto_core_update_email'     => '1',
+                'auto_update_debug_email'    => '1',
+                'new_user_admin_notify'      => '1',
+                'new_user_user_notify'       => '1',
+            ) );
+        }
+
+        if ( ! get_option( 'fhsmtp_misc_settings' ) ) {
+            add_option( 'fhsmtp_misc_settings', array(
+                'do_not_send'           => '0',
+                'hide_delivery_errors'  => '0',
+                'hide_dashboard_widget' => '0',
+                'remove_data_on_delete' => '0',
+            ) );
         }
 
         if ( ! get_option( 'fhsmtp_connection_stats' ) ) {
