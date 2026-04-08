@@ -178,7 +178,7 @@ final class FisHotel_SMTP {
     public function enqueue_admin_assets( $hook ) {
         $plugin_pages = array(
             'settings_page_fishotel-smtp',
-            'fishotel-smtp_page_fhsmtp-email-logs',
+            'settings_page_fhsmtp-email-logs',
             'index.php',
         );
         if ( ! in_array( $hook, $plugin_pages, true ) ) {
