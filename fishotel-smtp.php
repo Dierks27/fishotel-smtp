@@ -3,7 +3,7 @@
  * Plugin Name: FisHotel SMTP
  * Plugin URI: https://github.com/Dierks27/fishotel-smtp
  * Description: Custom SMTP mailer with Amazon SES support, backup failover, email logging, and failure alerts.
- * Version: 1.1.2
+ * Version: 1.2.0
  * Author: FisHotel
  * Author URI: https://github.com/Dierks27
  * License: GPL-2.0+
@@ -14,7 +14,7 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
-define( 'FHSMTP_VERSION', '1.1.2' );
+define( 'FHSMTP_VERSION', '1.2.0' );
 define( 'FHSMTP_PLUGIN_FILE', __FILE__ );
 define( 'FHSMTP_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'FHSMTP_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -57,9 +57,17 @@ final class FisHotel_SMTP {
         add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_admin_assets' ) );
         add_filter( 'plugin_row_meta', array( $this, 'add_check_update_link' ), 10, 2 );
         add_action( 'admin_init', array( $this, 'handle_check_update' ) );
+        add_filter( 'cron_schedules', array( $this, 'add_cron_intervals' ) );
     }
 
     public function init_components() {
+        // Run dbDelta on version change to add new columns
+        $db_version = get_option( 'fhsmtp_db_version', '0' );
+        if ( version_compare( $db_version, FHSMTP_VERSION, '<' ) ) {
+            FHSMTP_Logger::create_table();
+            update_option( 'fhsmtp_db_version', FHSMTP_VERSION );
+        }
+
         FHSMTP_Mailer::instance();
         FHSMTP_Admin::instance();
         FHSMTP_Logger::instance();
@@ -171,10 +179,32 @@ final class FisHotel_SMTP {
         if ( ! wp_next_scheduled( 'fhsmtp_cleanup_logs' ) ) {
             wp_schedule_event( time(), 'daily', 'fhsmtp_cleanup_logs' );
         }
+
+        $log_settings = get_option( 'fhsmtp_log_settings', array() );
+        if ( ! empty( $log_settings['retry_enabled'] ) && $log_settings['retry_enabled'] === '1' ) {
+            if ( ! wp_next_scheduled( 'fhsmtp_retry_failed_emails' ) ) {
+                $delay = absint( $log_settings['retry_delay'] ?? 15 );
+                $schedule = 'fhsmtp_every_' . $delay . '_min';
+                wp_schedule_event( time(), $schedule, 'fhsmtp_retry_failed_emails' );
+            }
+        }
     }
 
     public function deactivate() {
         wp_clear_scheduled_hook( 'fhsmtp_cleanup_logs' );
+        wp_clear_scheduled_hook( 'fhsmtp_retry_failed_emails' );
+    }
+
+    public function add_cron_intervals( $schedules ) {
+        $log_settings = get_option( 'fhsmtp_log_settings', array() );
+        $delay = absint( $log_settings['retry_delay'] ?? 15 );
+
+        $schedules[ 'fhsmtp_every_' . $delay . '_min' ] = array(
+            'interval' => $delay * MINUTE_IN_SECONDS,
+            'display'  => sprintf( 'Every %d minutes (FisHotel SMTP)', $delay ),
+        );
+
+        return $schedules;
     }
 
     public function enqueue_admin_assets( $hook ) {

@@ -84,10 +84,28 @@ class FHSMTP_Admin {
     }
 
     public function sanitize_log_settings( $input ) {
-        return array(
+        $old = get_option( 'fhsmtp_log_settings', array() );
+        $new = array(
             'logging_enabled' => ! empty( $input['logging_enabled'] ) ? '1' : '0',
             'retention_days'  => absint( $input['retention_days'] ?? 30 ),
+            'retry_enabled'   => ! empty( $input['retry_enabled'] ) ? '1' : '0',
+            'retry_delay'     => max( 5, absint( $input['retry_delay'] ?? 15 ) ),
+            'retry_max'       => max( 1, absint( $input['retry_max'] ?? 3 ) ),
         );
+
+        // Reschedule cron when retry settings change
+        $retry_changed = ( $new['retry_enabled'] !== ( $old['retry_enabled'] ?? '0' ) )
+                      || ( $new['retry_delay'] !== absint( $old['retry_delay'] ?? 15 ) );
+
+        if ( $retry_changed ) {
+            wp_clear_scheduled_hook( 'fhsmtp_retry_failed_emails' );
+            if ( $new['retry_enabled'] === '1' ) {
+                $schedule = 'fhsmtp_every_' . $new['retry_delay'] . '_min';
+                wp_schedule_event( time() + ( $new['retry_delay'] * MINUTE_IN_SECONDS ), $schedule, 'fhsmtp_retry_failed_emails' );
+            }
+        }
+
+        return $new;
     }
 
     public function sanitize_backup_settings( $input ) {
@@ -394,6 +412,38 @@ class FHSMTP_Admin {
                                value="<?php echo esc_attr( $settings['retention_days'] ?? '30' ); ?>"
                                class="small-text" min="1" max="365"> days
                         <p class="description">Logs older than this will be automatically deleted daily.</p>
+                    </td>
+                </tr>
+            </table>
+
+            <h2>Auto-Retry Failed Emails</h2>
+            <table class="form-table">
+                <tr>
+                    <th scope="row">Enable Auto-Retry</th>
+                    <td>
+                        <label>
+                            <input type="checkbox" name="fhsmtp_log_settings[retry_enabled]" value="1"
+                                <?php checked( $settings['retry_enabled'] ?? '0', '1' ); ?>>
+                            Automatically retry failed emails
+                        </label>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row"><label for="fhsmtp_retry_delay">Retry Interval</label></th>
+                    <td>
+                        <input type="number" name="fhsmtp_log_settings[retry_delay]" id="fhsmtp_retry_delay"
+                               value="<?php echo esc_attr( $settings['retry_delay'] ?? '15' ); ?>"
+                               class="small-text" min="5" max="1440"> minutes
+                        <p class="description">How often to check for and retry failed emails.</p>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row"><label for="fhsmtp_retry_max">Max Retries</label></th>
+                    <td>
+                        <input type="number" name="fhsmtp_log_settings[retry_max]" id="fhsmtp_retry_max"
+                               value="<?php echo esc_attr( $settings['retry_max'] ?? '3' ); ?>"
+                               class="small-text" min="1" max="10">
+                        <p class="description">Maximum number of retry attempts per email before giving up.</p>
                     </td>
                 </tr>
             </table>

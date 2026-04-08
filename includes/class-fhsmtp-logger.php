@@ -25,6 +25,7 @@ class FHSMTP_Logger {
         add_action( 'wp_mail_succeeded', array( $this, 'log_success' ) );
         add_action( 'wp_mail_failed', array( $this, 'log_failure' ) );
         add_action( 'fhsmtp_cleanup_logs', array( $this, 'cleanup_old_logs' ) );
+        add_action( 'fhsmtp_retry_failed_emails', array( $this, 'retry_failed_emails' ) );
     }
 
     public static function get_table_name() {
@@ -48,6 +49,7 @@ class FHSMTP_Logger {
             status varchar(20) NOT NULL DEFAULT 'sent',
             error_message text NOT NULL,
             connection_type varchar(20) NOT NULL DEFAULT 'primary',
+            retry_count smallint unsigned NOT NULL DEFAULT 0,
             created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY  (id),
             KEY status (status),
@@ -64,6 +66,10 @@ class FHSMTP_Logger {
      * This filter receives and must return the wp_mail args array.
      */
     public function capture_email_before_send( $args ) {
+        if ( ! empty( $GLOBALS['fhsmtp_is_retry'] ) ) {
+            self::$current_email = array();
+            return $args;
+        }
         self::$current_email = array(
             'to'          => is_array( $args['to'] ) ? implode( ', ', $args['to'] ) : $args['to'],
             'subject'     => $args['subject'] ?? '',
@@ -205,5 +211,57 @@ class FHSMTP_Logger {
             'failed'       => $failed,
             'success_rate' => $total > 0 ? round( ( $sent / $total ) * 100, 1 ) : 0,
         );
+    }
+
+    /**
+     * Retry failed emails. Called by WP-Cron.
+     */
+    public function retry_failed_emails() {
+        $log_settings = get_option( 'fhsmtp_log_settings', array() );
+        if ( empty( $log_settings['retry_enabled'] ) || $log_settings['retry_enabled'] !== '1' ) {
+            return;
+        }
+
+        $max_retries = absint( $log_settings['retry_max'] ?? 3 );
+
+        global $wpdb;
+        $table = self::get_table_name();
+
+        $failed = $wpdb->get_results( $wpdb->prepare(
+            "SELECT * FROM $table WHERE status = 'failed' AND retry_count < %d ORDER BY created_at ASC LIMIT 10",
+            $max_retries
+        ) );
+
+        if ( empty( $failed ) ) {
+            return;
+        }
+
+        // Flag to prevent retry sends from being logged as new entries
+        $GLOBALS['fhsmtp_is_retry'] = true;
+
+        foreach ( $failed as $log ) {
+            $headers = ! empty( $log->headers ) ? explode( "\n", $log->headers ) : array();
+            $result  = wp_mail( $log->to_email, $log->subject, $log->message, $headers );
+
+            if ( $result ) {
+                $wpdb->update(
+                    $table,
+                    array( 'status' => 'sent', 'error_message' => '', 'retry_count' => $log->retry_count + 1 ),
+                    array( 'id' => $log->id ),
+                    array( '%s', '%s', '%d' ),
+                    array( '%d' )
+                );
+            } else {
+                $wpdb->update(
+                    $table,
+                    array( 'retry_count' => $log->retry_count + 1 ),
+                    array( 'id' => $log->id ),
+                    array( '%d' ),
+                    array( '%d' )
+                );
+            }
+        }
+
+        unset( $GLOBALS['fhsmtp_is_retry'] );
     }
 }
