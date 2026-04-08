@@ -3,7 +3,7 @@
  * Plugin Name: FisHotel SMTP
  * Plugin URI: https://github.com/Dierks27/fishotel-smtp
  * Description: Custom SMTP mailer with Amazon SES support, backup failover, email logging, and failure alerts.
- * Version: 1.2.2
+ * Version: 1.2.3
  * Author: FisHotel
  * Author URI: https://github.com/Dierks27
  * License: GPL-2.0+
@@ -14,7 +14,7 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
-define( 'FHSMTP_VERSION', '1.2.2' );
+define( 'FHSMTP_VERSION', '1.2.3' );
 define( 'FHSMTP_PLUGIN_FILE', __FILE__ );
 define( 'FHSMTP_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'FHSMTP_PLUGIN_URL', plugin_dir_url( __FILE__ ) );

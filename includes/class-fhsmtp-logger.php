@@ -125,16 +125,6 @@ class FHSMTP_Logger {
 
         $error_msg = $wp_error->get_error_message();
 
-        // Capture actual PHPMailer state for debugging
-        global $phpmailer;
-        if ( isset( $phpmailer ) && is_object( $phpmailer ) ) {
-            $debug_info = array();
-            $debug_info[] = 'Actual From: ' . ( $phpmailer->From ?? 'N/A' );
-            $debug_info[] = 'Actual Sender: ' . ( $phpmailer->Sender ?? 'N/A' );
-            $debug_info[] = 'ErrorInfo: ' . ( $phpmailer->ErrorInfo ?? 'N/A' );
-            $error_msg .= "\n\n--- Debug ---\n" . implode( "\n", $debug_info );
-        }
-
         $this->insert_log(
             is_array( $to ) ? implode( ', ', $to ) : $to,
             $from,
