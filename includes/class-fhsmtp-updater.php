@@ -29,7 +29,7 @@ class FHSMTP_Updater {
     }
 
     /**
-     * Fetch latest release data from GitHub, with caching.
+     * Fetch latest version data from GitHub tags, with caching.
      */
     private function get_release_data() {
         $cached = get_transient( $this->cache_key );
@@ -37,7 +37,7 @@ class FHSMTP_Updater {
             return $cached;
         }
 
-        $url = sprintf( 'https://api.github.com/repos/%s/releases/latest', $this->repo );
+        $url = sprintf( 'https://api.github.com/repos/%s/tags?per_page=1', $this->repo );
 
         $response = wp_remote_get( $url, array(
             'headers' => array(
@@ -51,28 +51,31 @@ class FHSMTP_Updater {
             return false;
         }
 
-        $body = json_decode( wp_remote_retrieve_body( $response ), true );
-        if ( empty( $body['tag_name'] ) ) {
+        $tags = json_decode( wp_remote_retrieve_body( $response ), true );
+        if ( empty( $tags ) || empty( $tags[0]['name'] ) ) {
             return false;
         }
 
-        $data = array(
-            'version'     => ltrim( $body['tag_name'], 'v' ),
-            'download_url'=> $body['zipball_url'] ?? '',
-            'description' => $body['body'] ?? '',
-            'published_at'=> $body['published_at'] ?? '',
-            'html_url'    => $body['html_url'] ?? '',
+        $tag = $tags[0];
+        $version = ltrim( $tag['name'], 'v' );
+        $download_url = sprintf(
+            'https://api.github.com/repos/%s/zipball/%s',
+            $this->repo,
+            $tag['name']
+        );
+        $html_url = sprintf(
+            'https://github.com/%s/releases/tag/%s',
+            $this->repo,
+            $tag['name']
         );
 
-        // Prefer a .zip asset if one was uploaded to the release
-        if ( ! empty( $body['assets'] ) ) {
-            foreach ( $body['assets'] as $asset ) {
-                if ( substr( $asset['name'], -4 ) === '.zip' ) {
-                    $data['download_url'] = $asset['browser_download_url'];
-                    break;
-                }
-            }
-        }
+        $data = array(
+            'version'      => $version,
+            'download_url' => $download_url,
+            'description'  => '',
+            'published_at' => '',
+            'html_url'     => $html_url,
+        );
 
         set_transient( $this->cache_key, $data, $this->cache_ttl );
         return $data;
