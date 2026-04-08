@@ -68,6 +68,15 @@ class FHSMTP_Mailer {
         $phpmailer->Username   = $settings['smtp_username'];
         $phpmailer->Password   = $settings['smtp_password'];
 
+        // Capture SMTP debug output for troubleshooting
+        $phpmailer->SMTPDebug  = 2;
+        $phpmailer->Debugoutput = function( $str, $level ) {
+            if ( ! isset( $GLOBALS['fhsmtp_smtp_debug'] ) ) {
+                $GLOBALS['fhsmtp_smtp_debug'] = '';
+            }
+            $GLOBALS['fhsmtp_smtp_debug'] .= $str;
+        };
+
         switch ( $settings['smtp_encryption'] ) {
             case 'tls':
                 $phpmailer->SMTPSecure = 'tls';

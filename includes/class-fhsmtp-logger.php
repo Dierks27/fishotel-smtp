@@ -105,6 +105,7 @@ class FHSMTP_Logger {
             $connection_type
         );
 
+        unset( $GLOBALS['fhsmtp_smtp_debug'] );
         self::$current_email = array();
     }
 
@@ -123,6 +124,12 @@ class FHSMTP_Logger {
             $connection_type = $GLOBALS['fhsmtp_connection_used'];
         }
 
+        $error_msg = $wp_error->get_error_message();
+        if ( ! empty( $GLOBALS['fhsmtp_smtp_debug'] ) ) {
+            $error_msg .= "\n\n--- SMTP Debug ---\n" . $GLOBALS['fhsmtp_smtp_debug'];
+        }
+        unset( $GLOBALS['fhsmtp_smtp_debug'] );
+
         $this->insert_log(
             is_array( $to ) ? implode( ', ', $to ) : $to,
             $from,
@@ -131,7 +138,7 @@ class FHSMTP_Logger {
             self::$current_email['headers'] ?? '',
             self::$current_email['attachments'] ?? '',
             'failed',
-            $wp_error->get_error_message(),
+            $error_msg,
             $connection_type
         );
 
