@@ -974,6 +974,8 @@ class FHSMTP_Admin {
             'headers'         => esc_html( $log->headers ),
             'attachments'     => esc_html( $log->attachments ),
             'status'          => $log->status,
+            'status_label'    => esc_html( FHSMTP_Logger::status_label( $log->status ) ),
+            'status_class'    => in_array( $log->status, FHSMTP_Logger::sent_statuses(), true ) ? 'fhsmtp-status-sent' : 'fhsmtp-status-failed',
             'error_message'   => esc_html( $log->error_message ),
             'connection_type' => esc_html( $log->connection_type ),
         ) );
@@ -993,13 +995,15 @@ class FHSMTP_Admin {
             wp_send_json_error( 'Log not found.' );
         }
 
-        $headers = ! empty( $log->headers ) ? explode( "\n", $log->headers ) : array();
-        $result  = wp_mail( $log->to_email, $log->subject, $log->message, $headers );
+        // WHY (boards-smtp-wpit-10/-14): resend through the shared helper so the existing row is
+        // updated in place (no new rows) and stored attachments are re-attached, or the resend
+        // is refused with a clear reason when an attachment file is gone.
+        $outcome = FHSMTP_Logger::resend_log_entry( $log );
 
-        if ( $result ) {
-            wp_send_json_success( 'Email resent successfully.' );
+        if ( $outcome['success'] ) {
+            wp_send_json_success( $outcome['message'] );
         } else {
-            wp_send_json_error( 'Failed to resend email.' );
+            wp_send_json_error( $outcome['message'] );
         }
     }
 }

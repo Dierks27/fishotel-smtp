@@ -64,7 +64,8 @@ class FHSMTP_Alerts {
         // Get last error from logs
         global $wpdb;
         $table = FHSMTP_Logger::get_table_name();
-        $last_log = $wpdb->get_row( "SELECT * FROM $table WHERE status = 'failed' ORDER BY created_at DESC LIMIT 1" );
+        $failed_in = FHSMTP_Logger::status_in_sql( 'failed' );
+        $last_log  = $wpdb->get_row( "SELECT * FROM $table WHERE $failed_in ORDER BY created_at DESC LIMIT 1" );
 
         $context = array(
             'site_name' => get_bloginfo( 'name' ),

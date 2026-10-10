@@ -81,7 +81,10 @@
                 html += '<tr><th>To</th><td>' + d.to_email + '</td></tr>';
                 html += '<tr><th>From</th><td>' + d.from_email + '</td></tr>';
                 html += '<tr><th>Subject</th><td>' + d.subject + '</td></tr>';
-                html += '<tr><th>Status</th><td><span class="fhsmtp-status-' + d.status + '">' + d.status.charAt(0).toUpperCase() + d.status.slice(1) + '</span></td></tr>';
+                // Failover rows use sent_via_backup / failed_both; the server supplies label + class.
+                var statusClass = d.status_class || ('fhsmtp-status-' + d.status);
+                var statusLabel = d.status_label || (d.status.charAt(0).toUpperCase() + d.status.slice(1));
+                html += '<tr><th>Status</th><td><span class="' + statusClass + '">' + statusLabel + '</span></td></tr>';
                 html += '<tr><th>Connection</th><td>' + d.connection_type + '</td></tr>';
                 if (d.error_message) {
                     html += '<tr><th>Error</th><td style="color:#dc3232">' + d.error_message + '</td></tr>';
