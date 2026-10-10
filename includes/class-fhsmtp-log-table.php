@@ -90,7 +90,7 @@ class FHSMTP_Log_Table extends WP_List_Table {
             ),
         );
 
-        if ( 'failed' === $item->status ) {
+        if ( in_array( $item->status, FHSMTP_Logger::failed_statuses(), true ) ) {
             $actions['resend'] = sprintf(
                 '<a href="#" class="fhsmtp-resend-log" data-id="%d">Resend</a>',
                 $item->id
@@ -105,10 +105,11 @@ class FHSMTP_Log_Table extends WP_List_Table {
     }
 
     public function column_status( $item ) {
-        $class = 'sent' === $item->status ? 'fhsmtp-status-sent' : 'fhsmtp-status-failed';
-        $output = sprintf( '<span class="%s">%s</span>', $class, esc_html( ucfirst( $item->status ) ) );
+        // WHY (boards-smtp-wpit-12): failover rows carry sent_via_backup / failed_both.
+        $class  = in_array( $item->status, FHSMTP_Logger::sent_statuses(), true ) ? 'fhsmtp-status-sent' : 'fhsmtp-status-failed';
+        $output = sprintf( '<span class="%s">%s</span>', $class, esc_html( FHSMTP_Logger::status_label( $item->status ) ) );
 
-        if ( 'failed' === $item->status && ! empty( $item->error_message ) ) {
+        if ( ! empty( $item->error_message ) ) {
             $output .= sprintf(
                 '<br><small class="fhsmtp-error-msg" title="%s">%s</small>',
                 esc_attr( $item->error_message ),
@@ -141,8 +142,8 @@ class FHSMTP_Log_Table extends WP_List_Table {
         if ( ! empty( $_GET['filter_status'] ) ) {
             $status = sanitize_text_field( $_GET['filter_status'] );
             if ( in_array( $status, array( 'sent', 'failed' ), true ) ) {
-                $where[]  = 'status = %s';
-                $values[] = $status;
+                // Includes the failover statuses (sent_via_backup / failed_both).
+                $where[] = FHSMTP_Logger::status_in_sql( $status );
             }
         }
 

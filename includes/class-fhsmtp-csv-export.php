@@ -34,8 +34,8 @@ class FHSMTP_CSV_Export {
         if ( ! empty( $_GET['filter_status'] ) ) {
             $status = sanitize_text_field( $_GET['filter_status'] );
             if ( in_array( $status, array( 'sent', 'failed' ), true ) ) {
-                $where[]  = 'status = %s';
-                $values[] = $status;
+                // Includes the failover statuses (sent_via_backup / failed_both).
+                $where[] = FHSMTP_Logger::status_in_sql( $status );
             }
         }
 
